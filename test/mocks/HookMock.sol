@@ -10,6 +10,8 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {CurrencySettler} from "v4-core/test/utils/CurrencySettler.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
+/// @notice Custom curve hook mock with v4-like liquidity.
+/// @author cairoeth <https://github.com/cairoeth>
 contract HookMock is BaseV4Hook {
     using Hooks for IHooks;
     using CurrencySettler for Currency;

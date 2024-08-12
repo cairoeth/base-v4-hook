@@ -27,6 +27,7 @@ import {Extsload} from "v4-core/src/Extsload.sol";
 import {Exttload} from "v4-core/src/Exttload.sol";
 import {CustomRevert} from "v4-core/src/libraries/CustomRevert.sol";
 
+/// @author cairoeth <https://github.com/cairoeth>
 abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909Claims, Extsload, Exttload {
     using PoolIdLibrary for PoolKey;
     using SafeCast for *;

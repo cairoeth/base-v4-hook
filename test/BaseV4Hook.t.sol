@@ -61,7 +61,7 @@ contract BaseV4HookTest is Test, Deployers {
         });
         swapRouter.swap(_key, params, testSettings, ZERO_BYTES);
 
-        // the custom curve hook is 1-1 linear
+        // the hook mock implements a 1-1 linear curve (constant sum)
         assertEq(currency0.balanceOf(address(this)), balanceBefore0 - amountToSwap, "amount 0");
         assertEq(currency1.balanceOf(address(this)), balanceBefore1 + amountToSwap, "amount 1");
     }
@@ -84,7 +84,7 @@ contract BaseV4HookTest is Test, Deployers {
         });
         swapRouter.swap(_key, params, testSettings, ZERO_BYTES);
 
-        // the custom curve hook is 1-1 linear
+        // the hook mock implements a 1-1 linear curve (constant sum)
         assertEq(currency0.balanceOf(address(this)), balanceBefore0 - amountToSwap, "amount 0");
         assertEq(currency1.balanceOf(address(this)), balanceBefore1 + amountToSwap, "amount 1");
     }
