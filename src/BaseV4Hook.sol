@@ -39,12 +39,17 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     using CurrencyReserves for Currency;
     using CustomRevert for bytes4;
 
+    error DirectLiquidityOnly();
+
     int24 private constant MAX_TICK_SPACING = TickMath.MAX_TICK_SPACING;
 
     int24 private constant MIN_TICK_SPACING = TickMath.MIN_TICK_SPACING;
 
     mapping(PoolId id => Pool.State) internal _pools;
 
+    /// @notice Sets the constant for protocol fees and base hook.
+    /// @param controllerGasLimit The gas limit for the controller.
+    /// @param _poolManager The pool manager contract.
     constructor(uint256 controllerGasLimit, IPoolManager _poolManager)
         ProtocolFees(controllerGasLimit)
         BaseHook(_poolManager)
@@ -56,6 +61,11 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         _;
     }
 
+    /// @notice All interactions on the contract that account deltas require unlocking. A caller that calls `unlock` must implement
+    /// `IUnlockCallback(msg.sender).unlockCallback(data)`, where they interact with the remaining functions on this contract.
+    /// @dev The only functions callable without an unlocking are `initialize` and `updateDynamicLPFee`
+    /// @param data Any data to pass to the callback, via `IUnlockCallback(msg.sender).unlockCallback(data)`
+    /// @return result The data returned by the call to `IUnlockCallback(msg.sender).unlockCallback(data)`
     function unlock(bytes calldata data) external returns (bytes memory result) {
         if (Lock.isUnlocked()) IPoolManager.AlreadyUnlocked.selector.revertWith();
 
@@ -68,7 +78,11 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         Lock.lock();
     }
 
-    function initialize(PoolKey memory key, uint160 sqrtPriceX96, bytes calldata hookData)
+    /// @notice Initialize the state of this hook
+    /// @param key The pool key for the pool to initialize (remains constant)
+    /// @param sqrtPriceX96 The initial square root price
+    /// @return tick The initial tick of the pool
+    function initialize(PoolKey memory key, uint160 sqrtPriceX96, bytes calldata)
         external
         noDelegateCall
         returns (int24 tick)
@@ -85,14 +99,10 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
 
         uint24 lpFee = key.fee.getInitialLPFee();
 
-        key.hooks.beforeInitialize(key, sqrtPriceX96, hookData);
-
         PoolId id = key.toId();
         (, uint24 protocolFee) = _fetchProtocolFee(key);
 
         tick = _pools[id].initialize(sqrtPriceX96, protocolFee, lpFee);
-
-        key.hooks.afterInitialize(key, sqrtPriceX96, tick, hookData);
 
         // emit all details of a pool key. poolkeys are not saved in storage and must always be provided by the caller
         // the key's fee may be a static fee or a sentinel to denote a dynamic fee.
@@ -101,6 +111,11 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         );
     }
 
+    /// @notice Modify the liquidity of this hook
+    /// @param key The constant hook identifier
+    /// @param params The parameters for modifying the liquidity
+    /// @return callerDelta The balance delta of the caller of modifyLiquidity. This is the total of both principal and fee deltas.
+    /// @return feesAccrued The balance delta of the fees generated in the liquidity range. Returned for informational purposes.
     function modifyLiquidity(PoolKey memory key, IPoolManager.ModifyLiquidityParams memory params, bytes calldata)
         external
         onlyWhenUnlocked
@@ -132,6 +147,9 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         _accountPoolBalanceDelta(key, callerDelta, msg.sender);
     }
 
+    /// @notice Writes the current ERC20 balance of the specified currency to transient storage
+    /// This is used to checkpoint balances for the manager and derive deltas for the caller.
+    /// @param currency The currency whose balance to sync
     function sync(Currency currency) external {
         CurrencyReserves.requireNotSynced();
         if (currency.isNative()) return;
@@ -139,6 +157,10 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         CurrencyReserves.syncCurrencyAndReserves(currency, balance);
     }
 
+    /// @notice Called by the user to net out some value owed to the user
+    /// @param currency The currency to withdraw
+    /// @param to The address to withdraw to
+    /// @param amount The amount of currency to withdraw
     function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
         unchecked {
             // negation must be safe as amount is not negative
@@ -147,10 +169,15 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         }
     }
 
+    /// @notice Called by the user to pay what is owed
+    /// @return paid The amount of currency settled
     function settle() external payable onlyWhenUnlocked returns (uint256 paid) {
         return _settle(msg.sender);
     }
 
+    /// @notice Updates the hook's LP fees.
+    /// @param key The constant hook identifier.
+    /// @param newDynamicLPFee The new dynamic LP fee
     function updateDynamicLPFee(PoolKey memory key, uint24 newDynamicLPFee) external {
         if (!key.fee.isDynamicFee() || msg.sender != address(key.hooks)) {
             IPoolManager.UnauthorizedDynamicLPFeeUpdate.selector.revertWith();
@@ -160,6 +187,8 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         _pools[id].setLPFee(newDynamicLPFee);
     }
 
+    /// @notice Pay and settle the synced currency.
+    /// @param recipient The address to settle to
     function _settle(address recipient) internal returns (uint256 paid) {
         Currency currency = CurrencyReserves.getSyncedCurrency();
         // If not previously synced, expects native currency to be settled because CurrencyLibrary.NATIVE == address(0)
@@ -177,6 +206,9 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     }
 
     /// @notice Adds a balance delta in a currency for a target address
+    /// @param currency The currency to add the delta to
+    /// @param delta The delta to add
+    /// @param target The address to add the delta to
     function _accountDelta(Currency currency, int128 delta, address target) internal {
         if (delta == 0) return;
 
@@ -190,24 +222,28 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     }
 
     /// @notice Accounts the deltas of 2 currencies to a target address
+    /// @param key The constant hook identifier.
+    /// @param delta The delta to account
+    /// @param target The address to account the delta to
     function _accountPoolBalanceDelta(PoolKey memory key, BalanceDelta delta, address target) internal {
         _accountDelta(key.currency0, delta.amount0(), target);
         _accountDelta(key.currency1, delta.amount1(), target);
     }
 
-    /// @notice Implementation of the _getPool function defined in ProtocolFees
+    /// @notice Fetches the state of the hook.
+    /// @param id The constant ID of this hook.
     function _getPool(PoolId id) internal view override returns (Pool.State storage) {
         return _pools[id];
     }
 
-    /// @notice Liquidity must be deposited directly into this contract
+    /// @notice Liquidity must be deposited directly.
     function beforeAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
         external
         pure
         override
         returns (bytes4)
     {
-        revert("DirectLiquidityOnly");
+        revert DirectLiquidityOnly();
     }
 
     /// @dev Execute swap with custom logic
@@ -242,6 +278,7 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
         bytes calldata hookData
     ) internal virtual returns (bytes4, BeforeSwapDelta, uint24);
 
+    /// @notice Set the permissions for the hook
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
