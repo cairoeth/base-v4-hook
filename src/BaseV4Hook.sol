@@ -118,7 +118,6 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     /// @return feesAccrued The balance delta of the fees generated in the liquidity range. Returned for informational purposes.
     function modifyLiquidity(PoolKey memory key, IPoolManager.ModifyLiquidityParams memory params, bytes calldata)
         external
-        onlyWhenUnlocked
         noDelegateCall
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
