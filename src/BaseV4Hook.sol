@@ -118,6 +118,7 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     /// @return feesAccrued The balance delta of the fees generated in the liquidity range. Returned for informational purposes.
     function modifyLiquidity(PoolKey memory key, IPoolManager.ModifyLiquidityParams memory params, bytes calldata)
         external
+        onlyWhenUnlocked
         noDelegateCall
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
@@ -249,33 +250,40 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     /// @param sender The initial msg.sender for the swap call
     /// @param key The key for the pool
     /// @param params The parameters for the swap
-    /// @param hookData Arbitrary data handed into the PoolManager by the swapper to be be passed on to the hook
     /// @return bytes4 The function selector for the hook
     /// @return BeforeSwapDelta The hook's delta in specified and unspecified currencies. Positive: the hook is owed/took currency, negative: the hook owes/sent currency
     /// @return uint24 Optionally override the lp fee, only used if three conditions are met: 1. the Pool has a dynamic fee, 2. the value's 2nd highest bit is set (23rd bit, 0x400000), and 3. the value is less than or equal to the maximum fee (1 million)
-    function beforeSwap(
-        address sender,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) external override onlyByPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
-        return _beforeSwap(sender, key, params, hookData);
+    function beforeSwap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
+        external
+        virtual
+        override
+        onlyByPoolManager
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        return _beforeSwap(
+            sender,
+            key,
+            Pool.SwapParams({
+                tickSpacing: key.tickSpacing,
+                zeroForOne: params.zeroForOne,
+                amountSpecified: params.amountSpecified,
+                sqrtPriceLimitX96: params.sqrtPriceLimitX96,
+                lpFeeOverride: 0
+            })
+        );
     }
 
     /// @dev Execute swap with custom logic
     /// @param sender The initial msg.sender for the swap call
     /// @param key The key for the pool
     /// @param params The parameters for the swap
-    /// @param hookData Arbitrary data handed into the PoolManager by the swapper to be be passed on to the hook
     /// @return bytes4 The function selector for the hook
     /// @return BeforeSwapDelta The hook's delta in specified and unspecified currencies. Positive: the hook is owed/took currency, negative: the hook owes/sent currency
     /// @return uint24 Optionally override the lp fee, only used if three conditions are met: 1. the Pool has a dynamic fee, 2. the value's 2nd highest bit is set (23rd bit, 0x400000), and 3. the value is less than or equal to the maximum fee (1 million)
-    function _beforeSwap(
-        address sender,
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata hookData
-    ) internal virtual returns (bytes4, BeforeSwapDelta, uint24);
+    function _beforeSwap(address sender, PoolKey calldata key, Pool.SwapParams memory params)
+        internal
+        virtual
+        returns (bytes4, BeforeSwapDelta, uint24);
 
     /// @notice Set the permissions for the hook
     function getHookPermissions() public pure virtual override returns (Hooks.Permissions memory) {

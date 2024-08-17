@@ -9,6 +9,7 @@ import {BaseV4Hook} from "src/BaseV4Hook.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {CurrencySettler} from "v4-core/test/utils/CurrencySettler.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
+import {Pool} from "v4-core/src/libraries/Pool.sol";
 
 /// @notice Custom curve hook mock with v4-like liquidity.
 /// @author cairoeth <https://github.com/cairoeth>
@@ -18,12 +19,11 @@ contract HookMock is BaseV4Hook {
 
     constructor(uint256 controllerGasLimit, IPoolManager _poolManager) BaseV4Hook(controllerGasLimit, _poolManager) {}
 
-    function _beforeSwap(
-        address, /* sender **/
-        PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
-        bytes calldata /* hookData **/
-    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
+    function _beforeSwap(address, PoolKey calldata key, Pool.SwapParams memory params)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         (Currency input, Currency output) =
             params.zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
         uint256 amount = params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
