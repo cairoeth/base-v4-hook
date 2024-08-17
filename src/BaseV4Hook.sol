@@ -279,7 +279,7 @@ abstract contract BaseV4Hook is BaseHook, ProtocolFees, NoDelegateCall, ERC6909C
     ) internal virtual returns (bytes4, BeforeSwapDelta, uint24);
 
     /// @notice Set the permissions for the hook
-    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+    function getHookPermissions() public pure virtual override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
             afterInitialize: false,
